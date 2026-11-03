@@ -133,22 +133,35 @@ DECODE='
   }
   END {
     if (ENVIRON["HI_MODE"] == "head") {
-      print jv("tool_name")
-      print (match(buf, /"replace_all"[ \t\r\n]*:[ \t\r\n]*true/) ? "true" : "false")
-      print jv("file_path")
+      t = jv("tool_name")
+      if (!FOUND) {
+        t = jv("name")
+        if (t == "write_file") t = "Write"
+        else if (t == "edit_file") t = "Edit"
+        else if (t == "read_file") t = "Read"
+      }
+      print t
+      print ((t == "Edit" && match(buf, /"Target"[ \t\r\n]*:/)) || match(buf, /"replace_all"[ \t\r\n]*:[ \t\r\n]*true/) ? "true" : "false")
+      fp = jv("file_path"); if (!FOUND) fp = jv("Path")
+      print fp
       print jv("agent_type")
-      print (match(buf, /"(offset|limit)"[ \t\r\n]*:[ \t\r\n]*[0-9]/) ? "yes" : "no")
+      print (match(buf, /"(offset|limit|StartLine|EndLine|ByteOffset)"[ \t\r\n]*:[ \t\r\n]*[0-9]/) ? "yes" : "no")
       print "end"
       exit 0
     }
     t = jv("tool_name")
+    if (!FOUND) {
+      t = jv("name")
+      if (t == "write_file") t = "Write"
+      else if (t == "edit_file") t = "Edit"
+    }
     if (t == "Write") {
-      v = jv("content"); if (!FOUND) { print "content"; exit 0 }
+      v = jv("content"); if (!FOUND) v = jv("Content"); if (!FOUND) { print "content"; exit 0 }
       printf "%s", v > ENVIRON["HI_NEW"]
     } else {
-      v = jv("old_string"); if (!FOUND) { print "old_string"; exit 0 }
+      v = jv("old_string"); if (!FOUND) v = jv("Target"); if (!FOUND) { print "old_string"; exit 0 }
       printf "%s", v > ENVIRON["HI_OS"]
-      v = jv("new_string"); if (!FOUND) { print "new_string"; exit 0 }
+      v = jv("new_string"); if (!FOUND) v = jv("Replacement"); if (!FOUND) { print "new_string"; exit 0 }
       printf "%s", v > ENVIRON["HI_NS"]
     }
     print "ok"
@@ -162,7 +175,7 @@ JQB=""
 [ "$HAVE_JQ" = 1 ] && jq -b -n 1 >/dev/null 2>&1 && JQB=-b
 if [ "$HAVE_JQ" = 1 ]; then
   # tr: a native Windows jq.exe ends its lines CRLF under Git Bash.
-  HEAD=$(printf '%s' "$INPUT" | jq -r '(.tool_name // ""), (.tool_input.replace_all // false), (.tool_input.file_path // ""), (.agent_type // ""), (if ((.tool_input.offset | type) == "number" or (.tool_input.limit | type) == "number") then "yes" else "no" end), "end"' 2>/dev/null | tr -d '\r')
+  HEAD=$(printf '%s' "$INPUT" | jq -r '(if .tool_name then .tool_name elif .toolCall.name == "write_file" then "Write" elif .toolCall.name == "edit_file" then "Edit" elif .toolCall.name == "read_file" then "Read" else (.toolCall.name // "") end), (if .toolCall.name == "edit_file" then true else (.tool_input.replace_all // false) end), (.tool_input.file_path // .toolCall.args.Path // ""), (.agent_type // ""), (if ((.tool_input.offset | type) == "number" or (.tool_input.limit | type) == "number" or (.toolCall.args.StartLine | type) == "number" or (.toolCall.args.EndLine | type) == "number" or (.toolCall.args.ByteOffset | type) == "number") then "yes" else "no" end), "end"' 2>/dev/null | tr -d '\r')
 else
   HEAD=$(printf '%s' "$INPUT" | HI_MODE=head awk "$DECODE")
 fi
@@ -235,10 +248,10 @@ if [ "$HAVE_JQ" = 1 ]; then
   # writing nothing, which would read as an emptied file.
   # shellcheck disable=SC2086
   if [ "$TOOL" = Write ]; then
-    printf '%s' "$INPUT" | jq $JQB -e -j '.tool_input.content | strings' > "$NEWF" 2>/dev/null || GOT=content
+    printf '%s' "$INPUT" | jq $JQB -e -j '(.tool_input.content // .toolCall.args.Content) | strings' > "$NEWF" 2>/dev/null || GOT=content
   else
-    printf '%s' "$INPUT" | jq $JQB -e -j '.tool_input.old_string | strings' > "$OS" 2>/dev/null || GOT=old_string
-    [ "$GOT" = ok ] && { printf '%s' "$INPUT" | jq $JQB -e -j '.tool_input.new_string | strings' > "$NS" 2>/dev/null || GOT=new_string; }
+    printf '%s' "$INPUT" | jq $JQB -e -j '(.tool_input.old_string // .toolCall.args.Target) | strings' > "$OS" 2>/dev/null || GOT=old_string
+    [ "$GOT" = ok ] && { printf '%s' "$INPUT" | jq $JQB -e -j '(.tool_input.new_string // .toolCall.args.Replacement) | strings' > "$NS" 2>/dev/null || GOT=new_string; }
   fi
 else
   GOT=$(printf '%s' "$INPUT" | HI_MODE=body HI_NEW="$NEWF" HI_OS="$OS" HI_NS="$NS" awk "$DECODE")

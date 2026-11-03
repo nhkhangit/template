@@ -1,0 +1,72 @@
+{
+  "ccgs-session-start": {
+    "enabled": true,
+    "SessionStart": [
+      {
+        "type": "command",
+        "command": "bash ./agy-hook-adapter.sh SessionStart session-start.sh detect-gaps.sh",
+        "timeout": 15
+      }
+    ]
+  },
+  "ccgs-pre-tool-guards": {
+    "enabled": true,
+    "PreToolUse": [
+      {
+        "matcher": "run_command",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ./agy-hook-adapter.sh PreToolUse validate-commit.sh validate-push.sh",
+            "timeout": 20
+          }
+        ]
+      },
+      {
+        "matcher": "write_file|edit_file",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ./agy-hook-adapter.sh PreToolUse validate-registry.sh validate-write.sh",
+            "timeout": 20
+          }
+        ]
+      },
+      {
+        "matcher": "read_file",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ./agy-hook-adapter.sh PreToolUse validate-read.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  },
+  "ccgs-post-tool-validators": {
+    "enabled": true,
+    "PostToolUse": [
+      {
+        "matcher": "write_file|edit_file",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ./agy-hook-adapter.sh PostToolUse validate-assets.sh validate-skill-change.sh",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  },
+  "ccgs-session-stop": {
+    "enabled": true,
+    "Stop": [
+      {
+        "type": "command",
+        "command": "bash ./agy-hook-adapter.sh Stop session-stop.sh",
+        "timeout": 10
+      }
+    ]
+  }
+}
